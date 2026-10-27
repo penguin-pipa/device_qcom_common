@@ -127,15 +127,25 @@ ifeq ($(strip $(BOARD_KERNEL_SEPARATED_DTBO)),true)
 
 MKDTIMG := $(HOST_OUT_EXECUTABLES)/mkdtimg$(HOST_EXECUTABLE_SUFFIX)
 
-# Most specific paths must come first in possible_dtbo_dirs
-possible_dtbo_dirs = $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/arch/arm64/boot/dts $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/arch/arm/boot/dts
-$(shell mkdir -p $(possible_dtbo_dirs))
-dtbo_dir = $(firstword $(wildcard $(possible_dtbo_dirs)))
-dtbo_objs = $(shell find $(dtbo_dir) -name \*.dtbo)
+# Most specific paths must come first in possible_dtbo_dirs. The overlays
+# are produced by the kernel build, so resolution happens at recipe time:
+# when this file is parsed the kernel object dir may not exist yet.
+possible_dtbo_dirs := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/arch/arm64/boot/dts \
+                      $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/arch/arm/boot/dts
 
 define build-dtboimage-target
     $(call pretty,"Target dtbo image: $(BOARD_PREBUILT_DTBOIMAGE)")
-    $(hide) $(MKDTIMG) create $@ --page_size=$(BOARD_KERNEL_PAGESIZE) $(dtbo_objs)
+    $(hide) dtbo_dir=""; \
+           for d in $(possible_dtbo_dirs); do \
+               if [ -n "$$(find "$$d" -name '*.dtbo' -print -quit 2>/dev/null)" ]; then \
+                   dtbo_dir="$$d"; break; \
+               fi; \
+           done; \
+           if [ -z "$$dtbo_dir" ]; then \
+               echo "ERROR: no .dtbo files under $(possible_dtbo_dirs)"; \
+               rm -f $@; exit 1; \
+           fi; \
+           $(MKDTIMG) create $@ --page_size=$(BOARD_KERNEL_PAGESIZE) $$(find "$$dtbo_dir" -name '*.dtbo')
     $(hide) chmod a+r $@
 endef
 
