@@ -39,6 +39,7 @@ endif
 
 # Audio Packages
 PRODUCT_PACKAGES += \
+    liba2dpoffload \
     libvolumelistener
 
 # Permissions
